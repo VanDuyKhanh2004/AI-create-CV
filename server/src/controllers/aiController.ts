@@ -104,6 +104,11 @@ export const generateCV = async (req: AuthRequest, res: Response) => {
       }
     ];
 
+    // Require authentication so we can set owner on the CV (schema requires owner)
+    if (!user) {
+      return res.status(401).json({ message: 'Authentication required to generate CV' });
+    }
+
     const cvData: any = {
       personalInfo: personal,
       education: educationArr,
@@ -114,7 +119,8 @@ export const generateCV = async (req: AuthRequest, res: Response) => {
       awards: [],
       volunteer: [],
       publications: [],
-      metadata: { isPublic: false, language: 'en' }
+      metadata: { isPublic: false, language: 'en' },
+      owner: user._id,
     };
 
     const newCV = new CV(cvData);

@@ -18,6 +18,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "react-query";
 import api from "../config/api";
 import { toast } from "react-toastify";
+import GetAppIcon from "@mui/icons-material/GetApp";
 
 const CVEdit = () => {
   const { id } = useParams();
@@ -115,6 +116,42 @@ const CVEdit = () => {
             onClick={() => navigate("/cv-list")}
           >
             Back to List
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<GetAppIcon />}
+            sx={{ mr: 2 }}
+            onClick={async () => {
+              if (!cv?._id) return;
+              try {
+                const res = await fetch(
+                  `${
+                    process.env.REACT_APP_API_URL || "http://localhost:5000"
+                  }/api/cv/${cv._id}/download`,
+                  {
+                    method: "GET",
+                    credentials: "include",
+                  }
+                );
+                if (!res.ok) {
+                  alert("Failed to download PDF");
+                  return;
+                }
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `cv-${cv._id}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+              } catch (err) {
+                alert("Error downloading PDF");
+              }
+            }}
+          >
+            Download PDF
           </Button>
           <Button
             variant="contained"

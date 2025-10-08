@@ -15,6 +15,7 @@ import {
   Chip,
 } from "@mui/material";
 import { Edit, Delete, Visibility, MoreVert, Add } from "@mui/icons-material";
+import GetAppIcon from "@mui/icons-material/GetApp";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "react-query";
 import api from "../config/api";
@@ -82,6 +83,34 @@ const CVList = () => {
       deleteCVMutation.mutate(cvToDelete._id);
     }
     handleMenuClose();
+  };
+
+  const handleDownload = async (cv) => {
+    if (!cv?._id) return;
+    try {
+      const res = await fetch(
+        `${process.env.REACT_APP_API_URL || "http://localhost:5000"}/api/cv/${cv._id}/download`,
+        {
+          method: "GET",
+          credentials: "include",
+        }
+      );
+      if (!res.ok) {
+        alert("Failed to download PDF");
+        return;
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `cv-${cv._id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      alert("Error downloading PDF");
+    }
   };
 
   if (isLoading) {
@@ -212,6 +241,12 @@ const CVList = () => {
                   >
                     Edit
                   </Button>
+                  <IconButton
+                    color="primary"
+                    onClick={() => handleDownload(cv)}
+                  >
+                    <GetAppIcon />
+                  </IconButton>
                 </CardActions>
               </Card>
             </Grid>

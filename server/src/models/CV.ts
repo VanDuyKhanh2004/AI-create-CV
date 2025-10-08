@@ -133,6 +133,13 @@ const CVSchema = new mongoose.Schema({
     ref: 'Template'
   },
 
+  // Owner reference
+  owner: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+  },
+
   // Metadata
   metadata: {
     isPublic: { type: Boolean, default: false },

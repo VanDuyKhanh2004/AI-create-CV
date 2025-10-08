@@ -4,19 +4,21 @@ import {
   getCV,
   updateCV,
   deleteCV,
-  getAllCVs
+  getAllCVs,
+  downloadCVPdf
 } from '../controllers/cvController';
-import { downloadCVPdf } from '../controllers/cvController';
+import { authenticateToken, authorizeRole } from '../middleware/auth';
 
 const router = express.Router();
 
 // CV routes
-router.post('/', createCV);
-router.get('/', getAllCVs);
-router.get('/:id', getCV);
-router.put('/:id', updateCV);
-router.delete('/:id', deleteCV);
+// All routes require authentication by default
+router.post('/', authenticateToken, createCV);
+router.get('/', authenticateToken, getAllCVs);
+router.get('/:id', authenticateToken, getCV);
+router.put('/:id', authenticateToken, updateCV);
+router.delete('/:id', authenticateToken, deleteCV);
 // PDF download route
-router.get('/:id/download', downloadCVPdf);
+router.get('/:id/download', authenticateToken, downloadCVPdf);
 
 export default router;

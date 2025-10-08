@@ -11,7 +11,8 @@ if (!MONGODB_URI) {
 
 async function connectDB() {
     try {
-        await mongoose.connect(MONGODB_URI);
+    // MONGODB_URI is validated above; cast to string for the connect call
+    await mongoose.connect(MONGODB_URI as string);
         console.log('✅ MongoDB Connected successfully!');
         
         // Lấy thông tin về database

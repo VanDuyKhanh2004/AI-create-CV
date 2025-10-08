@@ -2,6 +2,7 @@ import express from "express";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import cors from "cors";
+import cookieParser from 'cookie-parser';
 import session from "express-session";
 import passport from "./config/passport"; // registers GoogleStrategy
 
@@ -17,6 +18,8 @@ app.use(
     credentials: true,
   })
 );
+// Parse cookies so that we can read httpOnly token cookie set by auth
+app.use(cookieParser());
 app.use(express.json());
 
 // Session (required for Passport to maintain login state)
