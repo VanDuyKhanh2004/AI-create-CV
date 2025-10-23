@@ -115,145 +115,142 @@ export const downloadCVPdf = async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
-    // Dynamically require PDFKit to avoid type issues if types are not installed
+    // Render an HTML template and convert to PDF using Puppeteer for pixel-perfect styling
     // @ts-ignore
-    const PDFDocument = require('pdfkit');
-    const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
+    const puppeteer = require('puppeteer');
 
-    // Set response headers for download
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="cv-${cv._id}.pdf"`);
-
-    // Pipe PDF to response
-    doc.pipe(res);
-
-    // Improved professional layout
     const cvAny: any = cv;
     const pInfo: any = cvAny.personalInfo || {};
 
-    const pageWidth = doc.page.width;
-    const pageMargin = 50;
-    const leftColWidth = 150;
-    const gap = 20;
-    const rightColX = pageMargin + leftColWidth + gap;
-    const rightColWidth = pageWidth - pageMargin - rightColX;
-
-    // Header (name + contact)
-    doc.fillColor('#333333').font('Helvetica-Bold').fontSize(22).text(pInfo.fullName || 'Unnamed', pageMargin, 60, { continued: false });
-    doc.moveDown(0.2);
-    doc.font('Helvetica').fontSize(10).fillColor('gray').text([pInfo.email, pInfo.phone, pInfo.address].filter(Boolean).join(' | '), { align: 'left' });
-
-    // Draw a subtle line under header
-    doc.moveTo(pageMargin, 110).lineTo(pageWidth - pageMargin, 110).lineWidth(0.5).strokeColor('#CCCCCC').stroke();
-
-    // Left column: contact, skills, languages
-    let y = 120;
-    const leftX = pageMargin;
-
-    function renderSectionTitle(x: number, yPos: number, title: string) {
-      doc.font('Helvetica-Bold').fontSize(12).fillColor('#0B5FFF').text(title.toUpperCase(), x, yPos);
-      return yPos + 16;
+    function escapeHtml(str: any) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     }
 
-    // Contact card
-    y = renderSectionTitle(leftX, y, 'Contact');
-    doc.font('Helvetica').fontSize(10).fillColor('#333333').text(pInfo.email || '', leftX, y, { width: leftColWidth });
-    y += 14;
-    if (pInfo.phone) { doc.text(pInfo.phone, leftX, y, { width: leftColWidth }); y += 14; }
-    if (pInfo.address) { doc.text(pInfo.address, leftX, y, { width: leftColWidth }); y += 14; }
-    y += 8;
+    // Build HTML that follows the attached sample: left sidebar (dark green), circular avatar, pill headings, boxed sections
+    const html = `
+      <html>
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <style>
+          @page { size: A4; margin: 0; }
+          body { font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif; margin: 0; color: #222; }
+          .page { width: 210mm; min-height: 297mm; box-sizing: border-box; padding: 18mm; background: #f4f6f5; }
+          .wrap { background: #fff; display:flex; border-radius: 8px; overflow: hidden; }
+          .sidebar { width: 36%; background: #485a4e; color: #fff; padding: 22px; box-sizing: border-box; }
+          .main { width: 64%; padding: 22px 26px; box-sizing: border-box; }
+          .avatar { width: 120px; height: 120px; border-radius: 60px; object-fit: cover; border: 6px solid rgba(255,255,255,0.12); }
+          .name { font-size: 20px; font-weight: 800; margin-top: 12px; }
+          .role { font-size: 12px; opacity: 0.95; margin-top: 6px; }
+          .muted { color: rgba(0,0,0,0.6); font-size: 12px; }
+          .section { margin-bottom: 12px; }
+          .pill { display:inline-block; background:#f1f1f1; color:#333; padding:6px 10px; border-radius:18px; font-weight:700; font-size:13px; }
+          .box { background: #fff; padding: 10px 12px; margin-top: 8px; border-radius: 6px; border-left: 4px solid rgba(0,0,0,0.04); }
+          .skill-chip { display:inline-block; background: rgba(255,255,255,0.12); color:#fff; padding:6px 8px; border-radius:14px; margin:4px 6px 4px 0; font-size:12px; }
+          .contact-line { margin-top:8px; font-size:12px; color: #fff; }
+          .heading { margin-bottom:6px; }
+          .exp-item { margin-bottom:10px; }
+          .small-muted { color:#8a8a8a; font-size:11px; }
+          .footer { font-size:10px; color:#999; text-align:right; margin-top:8px; }
+        </style>
+      </head>
+      <body>
+        <div class="page">
+          <div class="wrap">
+            <div class="sidebar">
+              <div style="display:flex; gap:16px; align-items:center;">
+                ${pInfo.avatar ? `<img class="avatar" src="${escapeHtml(pInfo.avatar)}"/>` : `<div class="avatar" style="display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.12);font-weight:800;font-size:28px">${escapeHtml((pInfo.fullName||'').split(' ').slice(0,2).map(n=>n[0]).join(''))}</div>`}
+                <div>
+                  <div class="name">${escapeHtml(pInfo.fullName || 'Unnamed')}</div>
+                  <div class="role">${escapeHtml(pInfo.jobTitle || '')}</div>
+                </div>
+              </div>
 
-    // Skills
-    y = renderSectionTitle(leftX, y, 'Skills');
-    try {
-      const skillsArr = Array.isArray(cvAny.skills)
-        ? cvAny.skills.map((s: any) => {
-            if (typeof s === 'string') return s;
-            if (s?.skills && Array.isArray(s.skills)) return s.skills.map((it: any) => it.name).filter(Boolean).join(', ');
-            return '';
-          }).filter(Boolean)
-        : [];
+              <div class="section">
+                <div class="pill">Thông tin</div>
+                <div class="box" style="background:transparent;border-left:none;padding-left:0;margin-top:10px">
+                  <div class="contact-line">📞 ${escapeHtml(pInfo.phone||'')}</div>
+                  <div class="contact-line">✉️ ${escapeHtml(pInfo.email||'')}</div>
+                  <div class="contact-line">🏠 ${escapeHtml(pInfo.address||'')}</div>
+                  ${cvAny.personalInfo?.birthdate ? `<div class="contact-line">🎂 ${escapeHtml(cvAny.personalInfo.birthdate)}</div>` : ''}
+                </div>
+              </div>
 
-      doc.font('Helvetica').fontSize(10).fillColor('#333333').text(skillsArr.join(', '), leftX, y, { width: leftColWidth });
-    } catch (e) {
-      doc.font('Helvetica').fontSize(10).text('', leftX, y, { width: leftColWidth });
-    }
+              <div class="section">
+                <div class="pill">Học vấn</div>
+                <div class="box" style="background:transparent;border-left:none;padding-left:0;margin-top:10px">
+                  ${Array.isArray(cvAny.education) ? cvAny.education.map(ed=>`<div style="margin-bottom:8px"><div style="font-weight:700">${escapeHtml(ed.school||'')}</div><div class="small-muted">${escapeHtml(ed.degree||'')} • ${escapeHtml(ed.fieldOfStudy||'')}</div></div>`).join('') : ''}
+                </div>
+              </div>
 
-    // Right column: summary, experience, education, projects
-    let rx = rightColX;
-    let ry = 120;
+              <div class="section">
+                <div class="pill">Kỹ năng</div>
+                <div style="margin-top:10px">
+                  ${(function(){ try { const skills = Array.isArray(cvAny.skills) ? cvAny.skills : []; return skills.map(s=>{ if (typeof s==='string') return `<span class="skill-chip">${escapeHtml(s)}</span>`; if (s?.skills && Array.isArray(s.skills)) return s.skills.map(it=>`<span class="skill-chip">${escapeHtml(it.name)}</span>`).join(''); return ''}).join(''); } catch(e){return ''} })()}
+                </div>
+              </div>
 
-    if (cvAny.summary) {
-      ry = renderSectionTitle(rx, ry, 'Summary');
-      doc.font('Helvetica').fontSize(11).fillColor('#333333').text(cvAny.summary, rx, ry, { width: rightColWidth });
-      ry += doc.heightOfString(cvAny.summary, { width: rightColWidth }) + 8;
-    }
+              <div style="margin-top:18px">
+                <div class="pill">Người giới thiệu</div>
+                <div class="box" style="background:transparent;border-left:none;padding-left:0;margin-top:10px">
+                  ${escapeHtml(cvAny.referee?.name || '')}<br/>
+                  <div class="small-muted">${escapeHtml(cvAny.referee?.title || '')}</div>
+                </div>
+              </div>
 
-    if (cvAny.experience && cvAny.experience.length) {
-      ry = renderSectionTitle(rx, ry, 'Experience');
-      cvAny.experience.forEach((exp: any) => {
-        const title = `${exp.position || ''} • ${exp.company || ''}`.trim();
-        doc.font('Helvetica-Bold').fontSize(11).fillColor('#333333').text(title, rx, ry, { width: rightColWidth });
-        ry += 14;
-        if (exp.startDate || exp.endDate) {
-          doc.font('Helvetica').fontSize(9).fillColor('gray').text(`${exp.startDate || ''} - ${exp.endDate || ''}`, rx, ry, { width: rightColWidth });
-          ry += 12;
-        }
-        if (exp.description) {
-          doc.font('Helvetica').fontSize(10).fillColor('#333333').text(exp.description, rx, ry, { width: rightColWidth });
-          ry += doc.heightOfString(exp.description, { width: rightColWidth }) + 6;
-        } else {
-          ry += 6;
-        }
+            </div>
 
-        // Add page if near bottom
-        if (ry > doc.page.height - 100) {
-          doc.addPage();
-          ry = pageMargin;
-          rx = pageMargin;
-        }
-      });
-    }
+            <div class="main">
+              <div class="section">
+                <div class="pill heading">Mục tiêu nghề nghiệp</div>
+                <div class="box">${escapeHtml(cvAny.personalInfo?.summary || cvAny.summary || '')}</div>
+              </div>
 
-    if (cvAny.education && cvAny.education.length) {
-      ry = renderSectionTitle(rx, ry, 'Education');
-      cvAny.education.forEach((edu: any) => {
-        const title = `${edu.degree || ''} • ${edu.school || ''}`.trim();
-        doc.font('Helvetica-Bold').fontSize(11).fillColor('#333333').text(title, rx, ry, { width: rightColWidth });
-        ry += 14;
-        if (edu.description) {
-          doc.font('Helvetica').fontSize(10).fillColor('#333333').text(edu.description, rx, ry, { width: rightColWidth });
-          ry += doc.heightOfString(edu.description, { width: rightColWidth }) + 6;
-        } else {
-          ry += 6;
-        }
-      });
-    }
+              <div class="section">
+                <div class="pill heading">Kinh nghiệm làm việc</div>
+                <div class="box">
+                  ${Array.isArray(cvAny.experience) ? cvAny.experience.map(exp=>`<div class="exp-item"><div style="font-weight:700">${escapeHtml(exp.position||'')} — ${escapeHtml(exp.company||'')}</div><div class="small-muted">${escapeHtml(exp.startDate||'')} - ${escapeHtml(exp.endDate||'')}</div><div style="margin-top:6px">${escapeHtml(exp.description||'')}</div></div>`).join('') : ''}
+                </div>
+              </div>
 
-    if (cvAny.projects && cvAny.projects.length) {
-      ry = renderSectionTitle(rx, ry, 'Projects');
-      cvAny.projects.forEach((proj: any) => {
-        doc.font('Helvetica-Bold').fontSize(11).fillColor('#333333').text(proj.name || '', rx, ry, { width: rightColWidth });
-        ry += 14;
-        if (proj.description) {
-          doc.font('Helvetica').fontSize(10).fillColor('#333333').text(proj.description, rx, ry, { width: rightColWidth });
-          ry += doc.heightOfString(proj.description, { width: rightColWidth }) + 6;
-        } else {
-          ry += 6;
-        }
-      });
-    }
+              <div class="section">
+                <div class="pill heading">Danh hiệu & Chứng chỉ</div>
+                <div class="box">
+                  ${Array.isArray(cvAny.certificates) ? cvAny.certificates.map(c=>`<div style="margin-bottom:6px"><div style="font-weight:700">${escapeHtml(c.name||'')}</div><div class="small-muted">${escapeHtml(c.issuer||'')} • ${escapeHtml(c.issueDate||'')}</div></div>`).join('') : ''}
+                </div>
+              </div>
 
-    // Footer with page numbers for all pages
-    const range = doc.bufferedPageRange(); // => { start: 0, count: 2 }
-    for (let i = range.start; i < range.start + range.count; i++) {
-      doc.switchToPage(i);
-      const pageNumber = i + 1;
-      doc.font('Helvetica').fontSize(9).fillColor('gray').text(`Page ${pageNumber} of ${range.count}`, pageMargin, doc.page.height - 40, { align: 'center', width: doc.page.width - pageMargin * 2 });
-    }
+              <div class="section">
+                <div class="pill heading">Dự án</div>
+                <div class="box">
+                  ${Array.isArray(cvAny.projects) ? cvAny.projects.map(p=>`<div style="margin-bottom:8px"><div style="font-weight:700">${escapeHtml(p.name||'')}</div><div class="small-muted">${escapeHtml(p.role||'')} • ${escapeHtml(p.startDate||'')} - ${escapeHtml(p.endDate||'')}</div><div style="margin-top:6px">${escapeHtml(p.description||'')}</div></div>`).join('') : ''}
+                </div>
+              </div>
 
-    // Finalize PDF and end stream
-    doc.end();
+              <div class="footer">© ${new Date().getFullYear()} • Generated by AI create CV</div>
+            </div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    // Launch puppeteer and render HTML to PDF
+    const browser = await puppeteer.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: 'networkidle0' });
+    const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true, margin: { top: '20mm', right: '20mm', bottom: '20mm', left: '20mm' } });
+    await browser.close();
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="cv-${cv._id}.pdf"`);
+    return res.send(pdfBuffer);
   } catch (error: any) {
     res.status(500).json({ error: 'Error generating PDF', details: error.message });
   }

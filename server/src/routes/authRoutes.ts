@@ -25,6 +25,19 @@ router.get('/google/callback',
                 return res.redirect(`${CLIENT_URL}/login`);
             }
 
+            // If the user came from Google ensure their email is marked verified
+            try {
+                if ((req.user as any).authProvider === 'google') {
+                    const u = await (await import('../models/User')).default.findById((req.user as any)._id || (req.user as any).id);
+                    if (u && !u.isEmailVerified) {
+                        u.isEmailVerified = true;
+                        await u.save();
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to mark Google user as verified:', err);
+            }
+
             const token = await createUserToken(req.user);
             setTokenCookie(res, token);
 
@@ -43,6 +56,13 @@ router.get('/status', (req, res) => {
     } else {
         res.json({ isAuthenticated: false, user: null });
     }
+});
+
+// Email verification endpoint
+router.get('/verify-email', async (req, res) => {
+    // Delegate to controller
+    const { verifyEmail } = await import('../controllers/authController');
+    return verifyEmail(req, res as any);
 });
 
 router.get('/logout', (req, res) => {
