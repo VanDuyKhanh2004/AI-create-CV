@@ -78,3 +78,18 @@ export const verifyEmailToken = (token: string): any => {
         return null;
     }
 };
+
+// Password reset token (short lived)
+export const generatePasswordToken = (userId: string): string => {
+    return jwt.sign({ id: userId, type: 'password_reset' }, JWT_SECRET, { expiresIn: '1h' });
+};
+
+export const verifyPasswordToken = (token: string): any => {
+    try {
+        const decoded: any = jwt.verify(token, JWT_SECRET);
+        if (decoded && decoded.type === 'password_reset') return decoded;
+        return null;
+    } catch (e) {
+        return null;
+    }
+};

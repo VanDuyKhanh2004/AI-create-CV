@@ -95,6 +95,9 @@ const Login = () => {
             margin="normal"
             required
           />
+          <Box textAlign="right" sx={{ mt: 1 }}>
+            <Link to="/forgot-password" style={{ textDecoration: 'none', fontSize: 14 }}>Quên mật khẩu?</Link>
+          </Box>
           <Button
             type="submit"
             fullWidth

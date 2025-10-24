@@ -10,7 +10,12 @@ import {
   Avatar,
   Alert,
   CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from "@mui/material";
+import api from '../config/api';
 import { useAuth } from "../contexts/AuthContext";
 import { toast } from "react-toastify";
 
@@ -22,6 +27,11 @@ const Profile = () => {
     email: user?.email || "",
   });
   const [loading, setLoading] = useState(false);
+  const [showChange, setShowChange] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [changing, setChanging] = useState(false);
+  const [changeError, setChangeError] = useState('');
 
   const handleChange = (e) => {
     setFormData({
@@ -127,8 +137,70 @@ const Profile = () => {
             <Button type="submit" variant="contained" disabled={loading}>
               {loading ? <CircularProgress size={24} /> : "Update Profile"}
             </Button>
-            <Button variant="outlined">Change Password</Button>
+            <Button
+              variant="outlined"
+              onClick={() => {
+                if (user?.authProvider === 'google') {
+                  toast.info('Tài khoản Google không thể đổi mật khẩu tại đây. Vui lòng quản lý mật khẩu qua Google.');
+                  return;
+                }
+                setShowChange(true);
+              }}
+            >
+              Change Password
+            </Button>
           </Box>
+
+          <Dialog open={showChange} onClose={() => setShowChange(false)}>
+            <DialogTitle>Change Password</DialogTitle>
+            <DialogContent>
+              {changeError && <Alert severity="error" sx={{ mb: 2 }}>{changeError}</Alert>}
+              <TextField
+                margin="normal"
+                label="Current password"
+                type="password"
+                fullWidth
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+              />
+              <TextField
+                margin="normal"
+                label="New password"
+                type="password"
+                fullWidth
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setShowChange(false)}>Cancel</Button>
+              <Button
+                variant="contained"
+                onClick={async () => {
+                  setChangeError('');
+                  if (newPassword.length < 8) {
+                    setChangeError('Mật khẩu mới phải có ít nhất 8 ký tự');
+                    return;
+                  }
+                  setChanging(true);
+                  try {
+                    await api.post('/auth/change-password', { currentPassword, newPassword });
+                    toast.success('Password changed');
+                    setShowChange(false);
+                    setCurrentPassword('');
+                    setNewPassword('');
+                  } catch (err) {
+                    setChangeError(err.response?.data?.message || 'Failed to change password');
+                  } finally {
+                    setChanging(false);
+                  }
+                }}
+                disabled={changing}
+              >
+                {changing ? <CircularProgress size={20} /> : 'Change'}
+              </Button>
+            </DialogActions>
+          </Dialog>
         </form>
 
         <Alert severity="info" sx={{ mt: 3 }}>

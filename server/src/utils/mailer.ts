@@ -126,6 +126,38 @@ export const sendVerificationEmail = async (to: string, token: string, name?: st
   }
 };
 
+export const sendResetPasswordEmail = async (to: string, token: string, name?: string) => {
+  const t = getTransporter();
+  if (!t) return false;
+  const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:3000';
+  const resetUrl = `${CLIENT_URL}/reset-password?token=${encodeURIComponent(token)}`;
+
+  const html = `
+    <div style="font-family:Arial,Helvetica,sans-serif;color:#222">
+      <h3>Xin chào ${escapeHtml(name || '')}</h3>
+      <p>Bạn (hoặc ai đó) đã yêu cầu đặt lại mật khẩu cho tài khoản của bạn. Nhấn nút bên dưới để đặt lại mật khẩu. Link sẽ hết hạn sau 1 giờ.</p>
+      <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="margin: 10px 0 18px;">
+        <tr>
+          <td style="border-radius:6px;background:#d32f2f;padding:8px 10px;">
+            <a href="${resetUrl}" style="color:#fff;text-decoration:none;font-weight:700;display:inline-block;padding:10px 14px;border-radius:6px;">Đặt lại mật khẩu</a>
+          </td>
+        </tr>
+      </table>
+      <p>Nếu bạn không yêu cầu, hãy bỏ qua email này.</p>
+    </div>
+  `;
+
+  const text = `Để đặt lại mật khẩu, hãy mở: ${resetUrl}\nLink hết hạn sau 1 giờ.`;
+
+  try {
+    await t.sendMail({ from: FROM_EMAIL, to, subject: 'Đặt lại mật khẩu - AI create CV', text, html });
+    return true;
+  } catch (err) {
+    console.error('Failed to send reset password email', err);
+    return false;
+  }
+};
+
 function escapeHtml(s: any) {
   if (!s) return '';
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');

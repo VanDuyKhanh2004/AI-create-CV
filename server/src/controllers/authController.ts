@@ -1,15 +1,24 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import User from '../models/User';
-import { createUserToken, setTokenCookie, generateEmailToken, verifyEmailToken } from '../utils/jwt';
-import { sendVerificationEmail, sendWelcomeEmail } from '../utils/mailer';
+import { createUserToken, setTokenCookie, generateEmailToken, verifyEmailToken, generatePasswordToken, verifyPasswordToken } from '../utils/jwt';
+import { sendVerificationEmail, sendWelcomeEmail, sendResetPasswordEmail } from '../utils/mailer';
 
 export const register = async (req: Request, res: Response) => {
     try {
         const { email, password, username, firstName, lastName } = req.body;
         const existing = await User.findOne({ email });
-        if (existing) return res.status(400).json({ message: 'Email already in use' });
+        if (existing) {
+            // If the existing account was created via Google, return a clearer message
+            if (existing.authProvider === 'google') {
+                return res.status(400).json({ message: 'Email đã được dùng bởi tài khoản Google. Vui lòng đăng nhập bằng Google hoặc sử dụng chức năng "Quên mật khẩu" để thiết lập mật khẩu cho tài khoản này.' });
+            }
+            return res.status(400).json({ message: 'Email already in use' });
+        }
 
+        if (password && password.length < 8) {
+            return res.status(400).json({ message: 'Mật khẩu phải có ít nhất 8 ký tự' });
+        }
         const hashed = password ? await bcrypt.hash(password, 10) : undefined;
 
         const user = await User.create({
@@ -91,6 +100,86 @@ export const verifyEmail = async (req: Request, res: Response) => {
         return res.json({ success: true, message: 'Email verified' });
     } catch (e) {
         console.error('verifyEmail error', e);
+        return res.status(500).json({ message: 'Server error' });
+    }
+};
+
+export const forgotPassword = async (req: Request, res: Response) => {
+    try {
+        const { email } = req.body;
+        if (!email) return res.status(400).json({ message: 'Email required' });
+
+        const user = await User.findOne({ email });
+        if (!user) return res.json({ success: true }); // do not reveal existence
+
+        if (user.authProvider === 'google') {
+            return res.status(400).json({ message: 'This account uses Google login; password reset not available' });
+        }
+
+        const token = generatePasswordToken(String(user._id));
+        // Send reset email
+        sendResetPasswordEmail(user.email, token, user.firstName || user.username).catch((e: any) => console.error('Reset email failed', e));
+
+        return res.json({ success: true });
+    } catch (e) {
+        console.error('forgotPassword error', e);
+        return res.status(500).json({ message: 'Server error' });
+    }
+};
+
+export const resetPassword = async (req: Request, res: Response) => {
+    try {
+    const { token, password } = req.body;
+    if (!token || !password) return res.status(400).json({ message: 'Token and password required' });
+    if (password.length < 8) return res.status(400).json({ message: 'Mật khẩu phải có ít nhất 8 ký tự' });
+
+        const decoded = verifyPasswordToken(token);
+        if (!decoded) return res.status(400).json({ message: 'Invalid or expired token' });
+
+        const userId = decoded.id;
+        const user = await User.findById(userId);
+        if (!user) return res.status(400).json({ message: 'User not found' });
+
+        if (user.authProvider === 'google') {
+            return res.status(400).json({ message: 'This account uses Google login; password reset not available' });
+        }
+
+        const hashed = await bcrypt.hash(password, 10);
+        user.password = hashed;
+        await user.save();
+
+        return res.json({ success: true, message: 'Password has been reset' });
+    } catch (e) {
+        console.error('resetPassword error', e);
+        return res.status(500).json({ message: 'Server error' });
+    }
+};
+
+export const changePassword = async (req: any, res: Response) => {
+    try {
+        const userId = req.user && (req.user as any)._id;
+        if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) return res.status(400).json({ message: 'Current and new password required' });
+    if (newPassword.length < 8) return res.status(400).json({ message: 'Mật khẩu mới phải có ít nhất 8 ký tự' });
+
+        const user = await User.findById(userId);
+        if (!user) return res.status(400).json({ message: 'User not found' });
+
+        if (user.authProvider === 'google') {
+            return res.status(400).json({ message: 'Google accounts cannot change password here' });
+        }
+
+        const match = await bcrypt.compare(currentPassword, user.password || '');
+        if (!match) return res.status(400).json({ message: 'Current password is incorrect' });
+
+        user.password = await bcrypt.hash(newPassword, 10);
+        await user.save();
+
+        return res.json({ success: true, message: 'Password changed' });
+    } catch (e) {
+        console.error('changePassword error', e);
         return res.status(500).json({ message: 'Server error' });
     }
 };

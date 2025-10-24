@@ -2,6 +2,8 @@ import express from 'express';
 import passport from 'passport';
 import { createUserToken, setTokenCookie } from '../utils/jwt';
 import { register, login, me } from '../controllers/authController';
+import { forgotPassword, resetPassword, changePassword } from '../controllers/authController';
+import { authenticateToken } from '../middleware/auth';
 
 const router = express.Router();
 
@@ -11,6 +13,9 @@ const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:3000';
 router.post('/register', register);
 router.post('/login', login);
 router.get('/me', me);
+router.post('/forgot-password', forgotPassword);
+router.post('/reset-password', resetPassword);
+router.post('/change-password', authenticateToken, changePassword);
 
 // Google OAuth
 router.get('/google',
